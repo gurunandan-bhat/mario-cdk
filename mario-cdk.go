@@ -5,9 +5,7 @@ import (
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2authorizers"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awscognito"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/constructs-go/constructs/v10"
@@ -33,11 +31,11 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 	})
 	loginLambda.Role().AddManagedPolicy(awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("SecretsManagerReadWrite")))
 
-	marioAuth := awsapigatewayv2authorizers.NewHttpUserPoolAuthorizer(
-		jsii.String("MarioAuth"),
-		awscognito.UserPool_FromUserPoolId(stack, jsii.String("MarioAuth"), jsii.String("ap-south-1_BoauKNKc9")),
-		nil,
-	)
+	// marioAuth := awsapigatewayv2authorizers.NewHttpUserPoolAuthorizer(
+	// 	jsii.String("MarioAuth"),
+	// 	awscognito.UserPool_FromUserPoolId(stack, jsii.String("MarioAuth"), jsii.String("ap-south-1_BoauKNKc9")),
+	// 	nil,
+	// )
 
 	loginAPI := awsapigatewayv2.NewHttpApi(stack, jsii.String("LoginAPI"), &awsapigatewayv2.HttpApiProps{
 		ApiName: jsii.String("LambdaLoginAPI"),
@@ -51,8 +49,8 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 			},
 			AllowOrigins: jsii.Strings("*"),
 		},
-		DefaultAuthorizer:          marioAuth,
-		DefaultAuthorizationScopes: jsii.Strings("openid", "email"),
+		// DefaultAuthorizer:          marioAuth,
+		// DefaultAuthorizationScopes: jsii.Strings("openid", "email"),
 	})
 
 	loginIntegration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
@@ -65,6 +63,11 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		Path:        jsii.String("/secret/{id}"),
 		Methods:     &[]awsapigatewayv2.HttpMethod{awsapigatewayv2.HttpMethod_GET},
 		Integration: loginIntegration,
+	})
+
+	awscdk.NewCfnOutput(stack, jsii.String("loginAPI URL"), &awscdk.CfnOutputProps{
+		Value:       loginAPI.Url(),
+		Description: jsii.String("The URL to test"),
 	})
 
 	return stack

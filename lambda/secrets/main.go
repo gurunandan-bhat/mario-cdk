@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -32,7 +33,15 @@ func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.A
 		VersionStage: aws.String("AWSCURRENT"),
 	}
 
-	result, err := smClient.GetSecretValue(context.TODO(), input)
+	_, err := smClient.GetSecretValue(context.TODO(), input)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: http.StatusInternalServerError,
+			Body:       err.Error(),
+		}, err
+	}
+
+	jsonBytes, err := json.MarshalIndent(event, "", "\t")
 	if err != nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
@@ -42,7 +51,8 @@ func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.A
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: http.StatusOK,
-		Body:       *result.SecretString,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(jsonBytes),
 	}, nil
 }
 
