@@ -33,13 +33,14 @@ func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.A
 		VersionStage: aws.String("AWSCURRENT"),
 	}
 
-	_, err := smClient.GetSecretValue(context.TODO(), input)
+	secret, err := smClient.GetSecretValue(context.TODO(), input)
 	if err != nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: http.StatusInternalServerError,
 			Body:       err.Error(),
 		}, err
 	}
+	event.Body = *secret.SecretString
 
 	jsonBytes, err := json.MarshalIndent(event, "", "\t")
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awssecretsmanager"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -30,6 +31,13 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		Handler: jsii.String("main"),
 	})
 	loginLambda.Role().AddManagedPolicy(awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("SecretsManagerReadWrite")))
+
+	marioSecret := awssecretsmanager.Secret_FromSecretCompleteArn(
+		stack,
+		jsii.String("MarioSecret"),
+		jsii.String("arn:aws:secretsmanager:ap-south-1:566275025856:secret:mario/defaultSecret-NI1lQX"),
+	)
+	marioSecret.GrantRead(loginLambda, jsii.Strings())
 
 	// marioAuth := awsapigatewayv2authorizers.NewHttpUserPoolAuthorizer(
 	// 	jsii.String("MarioAuth"),
