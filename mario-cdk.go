@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awssecretsmanager"
@@ -38,6 +39,24 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		jsii.String("arn:aws:secretsmanager:ap-south-1:566275025856:secret:mario/defaultSecret-NI1lQX"),
 	)
 	marioSecret.GrantRead(loginLambda, jsii.Strings())
+
+	marioAuthLogTable := awsdynamodb.NewTable(stack, jsii.String("MarioAuthLog"), &awsdynamodb.TableProps{
+		PartitionKey: &awsdynamodb.Attribute{
+			Name: jsii.String("PK"),
+			Type: awsdynamodb.AttributeType_STRING,
+		},
+		SortKey: &awsdynamodb.Attribute{
+			Name: jsii.String("SK"),
+			Type: awsdynamodb.AttributeType_STRING,
+		},
+		BillingMode:   awsdynamodb.BillingMode_PAY_PER_REQUEST,
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+	})
+	awslambda.NewFunction(stack, jsii.String("MarioAuthLogTrigger"), &awslambda.FunctionProps{
+		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
+		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/users/function.zip"), nil),
+		Handler: jsii.String("main"),
+	})
 
 	// marioAuth := awsapigatewayv2authorizers.NewHttpUserPoolAuthorizer(
 	// 	jsii.String("MarioAuth"),
@@ -76,6 +95,11 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 	awscdk.NewCfnOutput(stack, jsii.String("loginAPI URL"), &awscdk.CfnOutputProps{
 		Value:       loginAPI.Url(),
 		Description: jsii.String("The URL to test"),
+	})
+
+	awscdk.NewCfnOutput(stack, jsii.String("mario Auth Log Table"), &awscdk.CfnOutputProps{
+		Value:       marioAuthLogTable.TableName(),
+		Description: jsii.String("The name of the table"),
 	})
 
 	return stack
