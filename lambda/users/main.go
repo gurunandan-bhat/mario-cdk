@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
@@ -20,7 +21,7 @@ type eventData struct {
 	Data string
 }
 
-var tableName = "MarioCdkStack-MarioAuthLogB1240A5C-1JBZXKAT5OBR"
+var tableName = os.Getenv("AUTHLOG_TABLENAME")
 
 func handleAuthEvents(ctx context.Context, event json.RawMessage) error {
 
@@ -32,7 +33,7 @@ func handleAuthEvents(ctx context.Context, event json.RawMessage) error {
 		return fmt.Errorf("error loading aws config: %w", err)
 	}
 	client := dynamodb.NewFromConfig(cfg)
-
+	fmt.Println("Table: ", tableName)
 	data := eventData{
 		PK:   id,
 		SK:   tstamp,

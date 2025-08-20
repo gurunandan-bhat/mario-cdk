@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awscognito"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awssecretsmanager"
@@ -24,47 +25,14 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 	}
 	stack := awscdk.NewStack(scope, &id, &sprops)
 
-	// The code that defines your stack goes here
-	loginLambda := awslambda.NewFunction(stack, jsii.String("MarioCDKLambdaLoginURL"), &awslambda.FunctionProps{
+	// Create a simple lambda to make sure it can read secrets
+	testLambda := awslambda.NewFunction(stack, jsii.String("MarioCDKLambdaLoginURL"), &awslambda.FunctionProps{
 		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
 		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/secrets/function.zip"), nil),
 		Handler: jsii.String("main"),
 	})
-	loginLambda.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
-
-	marioSecret := awssecretsmanager.Secret_FromSecretCompleteArn(
-		stack,
-		jsii.String("MarioSecret"),
-		jsii.String("arn:aws:secretsmanager:ap-south-1:566275025856:secret:mario/defaultSecret-NI1lQX"),
-	)
-	marioSecret.GrantRead(loginLambda, jsii.Strings())
-
-	marioAuthLogTable := awsdynamodb.NewTable(stack, jsii.String("MarioAuthLog"), &awsdynamodb.TableProps{
-		PartitionKey: &awsdynamodb.Attribute{
-			Name: jsii.String("PK"),
-			Type: awsdynamodb.AttributeType_STRING,
-		},
-		SortKey: &awsdynamodb.Attribute{
-			Name: jsii.String("SK"),
-			Type: awsdynamodb.AttributeType_STRING,
-		},
-		BillingMode:   awsdynamodb.BillingMode_PAY_PER_REQUEST,
-		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
-	})
-	marioAuthLogTrigger := awslambda.NewFunction(stack, jsii.String("MarioAuthLogTrigger"), &awslambda.FunctionProps{
-		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
-		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/users/function.zip"), nil),
-		Handler: jsii.String("main"),
-	})
-	marioAuthLogTrigger.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
-
-	// marioAuth := awsapigatewayv2authorizers.NewHttpUserPoolAuthorizer(
-	// 	jsii.String("MarioAuth"),
-	// 	awscognito.UserPool_FromUserPoolId(stack, jsii.String("MarioAuth"), jsii.String("ap-south-1_BoauKNKc9")),
-	// 	nil,
-	// )
-
-	loginAPI := awsapigatewayv2.NewHttpApi(stack, jsii.String("LoginAPI"), &awsapigatewayv2.HttpApiProps{
+	testLambda.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
+	testAPI := awsapigatewayv2.NewHttpApi(stack, jsii.String("LoginAPI"), &awsapigatewayv2.HttpApiProps{
 		ApiName: jsii.String("LambdaLoginAPI"),
 		CorsPreflight: &awsapigatewayv2.CorsPreflightOptions{
 			AllowHeaders: jsii.Strings("Authorization"),
@@ -79,20 +47,117 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		// DefaultAuthorizer:          marioAuth,
 		// DefaultAuthorizationScopes: jsii.Strings("openid", "email"),
 	})
-	loginIntegration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
+	testIntegration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
 		jsii.String("LoginIntegration"),
-		loginLambda,
+		testLambda,
 		&awsapigatewayv2integrations.HttpLambdaIntegrationProps{},
 	)
-	loginAPI.AddRoutes(&awsapigatewayv2.AddRoutesOptions{
+	testAPI.AddRoutes(&awsapigatewayv2.AddRoutesOptions{
 		Path:        jsii.String("/secret/{id}"),
 		Methods:     &[]awsapigatewayv2.HttpMethod{awsapigatewayv2.HttpMethod_GET},
-		Integration: loginIntegration,
+		Integration: testIntegration,
 	})
-	loginAPI.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
+	testAPI.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
 
-	awscdk.NewCfnOutput(stack, jsii.String("loginAPI URL"), &awscdk.CfnOutputProps{
-		Value:       loginAPI.Url(),
+	marioSecret := awssecretsmanager.Secret_FromSecretCompleteArn(
+		stack,
+		jsii.String("MarioSecret"),
+		jsii.String("arn:aws:secretsmanager:ap-south-1:566275025856:secret:mario/defaultSecret-NI1lQX"),
+	)
+	marioSecret.GrantRead(testLambda, jsii.Strings())
+
+	marioAuthLogTrigger := awslambda.NewFunction(stack, jsii.String("MarioAuthLogTrigger"), &awslambda.FunctionProps{
+		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
+		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/users/function.zip"), nil),
+		Handler: jsii.String("main"),
+	})
+	marioAuthLogTrigger.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
+
+	marioAuthLogTable := awsdynamodb.NewTable(stack, jsii.String("MarioAuthLog"), &awsdynamodb.TableProps{
+		PartitionKey: &awsdynamodb.Attribute{
+			Name: jsii.String("PK"),
+			Type: awsdynamodb.AttributeType_STRING,
+		},
+		SortKey: &awsdynamodb.Attribute{
+			Name: jsii.String("SK"),
+			Type: awsdynamodb.AttributeType_STRING,
+		},
+		BillingMode:   awsdynamodb.BillingMode_PAY_PER_REQUEST,
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+	})
+	marioAuthLogTable.GrantReadWriteData(marioAuthLogTrigger)
+	marioAuthLogTrigger.AddEnvironment(jsii.String("AUTHLOG_TABLENAME"), marioAuthLogTable.TableName(), nil)
+
+	// Create a User Pool and client
+	marioUserPool := awscognito.NewUserPool(stack, jsii.String("MarioUserPool"), &awscognito.UserPoolProps{
+		AccountRecovery: awscognito.AccountRecovery_EMAIL_ONLY,
+		LambdaTriggers: &awscognito.UserPoolTriggers{
+			PreSignUp:          marioAuthLogTrigger,
+			PostConfirmation:   marioAuthLogTrigger,
+			PreAuthentication:  marioAuthLogTrigger,
+			PostAuthentication: marioAuthLogTrigger,
+		},
+		SelfSignUpEnabled: jsii.Bool(true),
+		PasswordPolicy: &awscognito.PasswordPolicy{
+			MinLength:        jsii.Number(8),
+			RequireLowercase: jsii.Bool(true),
+			RequireUppercase: jsii.Bool(true),
+			RequireDigits:    jsii.Bool(true),
+			RequireSymbols:   jsii.Bool(true),
+		},
+		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
+		StandardAttributes: &awscognito.StandardAttributes{
+			Fullname: &awscognito.StandardAttribute{
+				Required: jsii.Bool(true),
+			},
+			Email: &awscognito.StandardAttribute{
+				Required: jsii.Bool(true),
+			},
+		},
+		SignInAliases: &awscognito.SignInAliases{
+			Email:    jsii.Bool(true),
+			Username: jsii.Bool(false),
+		},
+		UserPoolName: jsii.String("MarioUserPool"),
+	})
+	marioUserPoolClient := marioUserPool.AddClient(jsii.String("MarioUserPoolClient"), &awscognito.UserPoolClientOptions{
+		EnableTokenRevocation: jsii.Bool(true),
+		GenerateSecret:        jsii.Bool(true),
+		OAuth: &awscognito.OAuthSettings{
+			CallbackUrls: jsii.Strings("http://localhost:2000/callback"),
+			Flows: &awscognito.OAuthFlows{
+				AuthorizationCodeGrant: jsii.Bool(true),
+			},
+			LogoutUrls: jsii.Strings("http://localhost:2000/logout"),
+			Scopes: &[]awscognito.OAuthScope{
+				awscognito.OAuthScope_OPENID(),
+				awscognito.OAuthScope_EMAIL(),
+				awscognito.OAuthScope_PROFILE(),
+			},
+		},
+		WriteAttributes: (awscognito.NewClientAttributes()).WithStandardAttributes(&awscognito.StandardAttributesMask{
+			Fullname: jsii.Bool(true),
+			Email:    jsii.Bool(true),
+		}),
+	})
+	marioUserPoolClient.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
+	awscognito.NewCfnManagedLoginBranding(stack, jsii.String("MarioLoginBranding"), &awscognito.CfnManagedLoginBrandingProps{
+		UserPoolId:               marioUserPool.UserPoolId(),
+		ClientId:                 marioUserPoolClient.UserPoolClientId(),
+		UseCognitoProvidedValues: jsii.Bool(true),
+	})
+	marioUserPool.AddDomain(
+		jsii.String("MarioUserPoolDomain"),
+		&awscognito.UserPoolDomainOptions{
+			CognitoDomain: &awscognito.CognitoDomainOptions{
+				DomainPrefix: jsii.String("mario"),
+			},
+			ManagedLoginVersion: awscognito.ManagedLoginVersion_NEWER_MANAGED_LOGIN,
+		},
+	)
+
+	awscdk.NewCfnOutput(stack, jsii.String("testAPI URL"), &awscdk.CfnOutputProps{
+		Value:       testAPI.Url(),
 		Description: jsii.String("The URL to test"),
 	})
 
