@@ -7,7 +7,6 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awssecretsmanager"
 	"github.com/aws/constructs-go/constructs/v10"
@@ -31,7 +30,7 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/secrets/function.zip"), nil),
 		Handler: jsii.String("main"),
 	})
-	loginLambda.Role().AddManagedPolicy(awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("SecretsManagerReadWrite")))
+	loginLambda.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
 
 	marioSecret := awssecretsmanager.Secret_FromSecretCompleteArn(
 		stack,
@@ -52,11 +51,12 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		BillingMode:   awsdynamodb.BillingMode_PAY_PER_REQUEST,
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 	})
-	awslambda.NewFunction(stack, jsii.String("MarioAuthLogTrigger"), &awslambda.FunctionProps{
+	marioAuthLogTrigger := awslambda.NewFunction(stack, jsii.String("MarioAuthLogTrigger"), &awslambda.FunctionProps{
 		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
 		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/users/function.zip"), nil),
 		Handler: jsii.String("main"),
 	})
+	marioAuthLogTrigger.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
 
 	// marioAuth := awsapigatewayv2authorizers.NewHttpUserPoolAuthorizer(
 	// 	jsii.String("MarioAuth"),
@@ -79,18 +79,17 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		// DefaultAuthorizer:          marioAuth,
 		// DefaultAuthorizationScopes: jsii.Strings("openid", "email"),
 	})
-
 	loginIntegration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
 		jsii.String("LoginIntegration"),
 		loginLambda,
 		&awsapigatewayv2integrations.HttpLambdaIntegrationProps{},
 	)
-
 	loginAPI.AddRoutes(&awsapigatewayv2.AddRoutesOptions{
 		Path:        jsii.String("/secret/{id}"),
 		Methods:     &[]awsapigatewayv2.HttpMethod{awsapigatewayv2.HttpMethod_GET},
 		Integration: loginIntegration,
 	})
+	loginAPI.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
 
 	awscdk.NewCfnOutput(stack, jsii.String("loginAPI URL"), &awscdk.CfnOutputProps{
 		Value:       loginAPI.Url(),
