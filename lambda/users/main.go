@@ -23,17 +23,16 @@ type eventData struct {
 
 var tableName = os.Getenv("AUTHLOG_TABLENAME")
 
-func handleAuthEvents(ctx context.Context, event json.RawMessage) error {
+func handleAuthEvents(ctx context.Context, event json.RawMessage) (json.RawMessage, error) {
 
 	id := uuid.NewString()
 	tstamp := time.Now().Format(time.RFC3339)
 
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
-		return fmt.Errorf("error loading aws config: %w", err)
+		return nil, fmt.Errorf("error loading aws config: %w", err)
 	}
 	client := dynamodb.NewFromConfig(cfg)
-	fmt.Println("Table: ", tableName)
 	data := eventData{
 		PK:   id,
 		SK:   tstamp,
@@ -41,7 +40,7 @@ func handleAuthEvents(ctx context.Context, event json.RawMessage) error {
 	}
 	row, err := attributevalue.MarshalMap(data)
 	if err != nil {
-		return fmt.Errorf("error marshalling data to map: %w", err)
+		return nil, fmt.Errorf("error marshalling data to map: %w", err)
 	}
 
 	_, err = client.PutItem(context.Background(), &dynamodb.PutItemInput{
@@ -49,9 +48,9 @@ func handleAuthEvents(ctx context.Context, event json.RawMessage) error {
 		Item:      row,
 	})
 	if err != nil {
-		return fmt.Errorf("error inserting row in table: %w", err)
+		return nil, fmt.Errorf("error inserting row in table: %w", err)
 	}
-	return nil
+	return event, nil
 }
 
 func main() {

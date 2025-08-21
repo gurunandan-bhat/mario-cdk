@@ -66,13 +66,6 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 	)
 	marioSecret.GrantRead(testLambda, jsii.Strings())
 
-	marioAuthLogTrigger := awslambda.NewFunction(stack, jsii.String("MarioAuthLogTrigger"), &awslambda.FunctionProps{
-		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
-		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/users/function.zip"), nil),
-		Handler: jsii.String("main"),
-	})
-	marioAuthLogTrigger.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
-
 	marioAuthLogTable := awsdynamodb.NewTable(stack, jsii.String("MarioAuthLog"), &awsdynamodb.TableProps{
 		PartitionKey: &awsdynamodb.Attribute{
 			Name: jsii.String("PK"),
@@ -85,8 +78,14 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		BillingMode:   awsdynamodb.BillingMode_PAY_PER_REQUEST,
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 	})
-	marioAuthLogTable.GrantReadWriteData(marioAuthLogTrigger)
+	marioAuthLogTrigger := awslambda.NewFunction(stack, jsii.String("MarioAuthLogTrigger"), &awslambda.FunctionProps{
+		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
+		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/users/function.zip"), nil),
+		Handler: jsii.String("main"),
+	})
+	marioAuthLogTrigger.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
 	marioAuthLogTrigger.AddEnvironment(jsii.String("AUTHLOG_TABLENAME"), marioAuthLogTable.TableName(), nil)
+	marioAuthLogTable.GrantFullAccess(marioAuthLogTrigger)
 
 	// Create a User Pool and client
 	marioUserPool := awscognito.NewUserPool(stack, jsii.String("MarioUserPool"), &awscognito.UserPoolProps{
@@ -123,6 +122,9 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 	marioUserPoolClient := marioUserPool.AddClient(jsii.String("MarioUserPoolClient"), &awscognito.UserPoolClientOptions{
 		EnableTokenRevocation: jsii.Bool(true),
 		GenerateSecret:        jsii.Bool(true),
+		AuthFlows: &awscognito.AuthFlow{
+			UserSrp: jsii.Bool(true),
+		},
 		OAuth: &awscognito.OAuthSettings{
 			CallbackUrls: jsii.Strings("http://localhost:2000/callback"),
 			Flows: &awscognito.OAuthFlows{
@@ -155,6 +157,10 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 			ManagedLoginVersion: awscognito.ManagedLoginVersion_NEWER_MANAGED_LOGIN,
 		},
 	)
+	awscdk.NewCfnOutput(stack, jsii.String("Auth Trigger Role"), &awscdk.CfnOutputProps{
+		Value:       marioAuthLogTrigger.Role().RoleName(),
+		Description: jsii.String("Role that runs the auth trigger"),
+	})
 
 	awscdk.NewCfnOutput(stack, jsii.String("testAPI URL"), &awscdk.CfnOutputProps{
 		Value:       testAPI.Url(),
