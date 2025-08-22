@@ -29,8 +29,7 @@ func handler(ctx context.Context, event events.APIGatewayProxyRequest) (events.A
 
 	secretName := "mario/defaultSecret"
 	input := &secretsmanager.GetSecretValueInput{
-		SecretId:     aws.String(secretName),
-		VersionStage: aws.String("AWSCURRENT"),
+		SecretId: aws.String(secretName),
 	}
 
 	secret, err := smClient.GetSecretValue(context.TODO(), input)

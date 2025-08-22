@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
@@ -26,14 +27,22 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 	stack := awscdk.NewStack(scope, &id, &sprops)
 
 	// Create a simple lambda to make sure it can read secrets
-	testLambda := awslambda.NewFunction(stack, jsii.String("MarioCDKLambdaLoginURL"), &awslambda.FunctionProps{
-		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
-		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/secrets/function.zip"), nil),
-		Handler: jsii.String("main"),
+	marioSecret := awssecretsmanager.Secret_FromSecretCompleteArn(
+		stack,
+		jsii.String("mario/defaultSecret"),
+		jsii.String("arn:aws:secretsmanager:ap-south-1:566275025856:secret:mario/defaultSecret-NI1lQX"),
+	)
+	testLambda := awslambda.NewFunction(stack, jsii.String("MarioTestLambda"), &awslambda.FunctionProps{
+		FunctionName: jsii.String("MarioTestLambda"),
+		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
+		Code:         awslambda.AssetCode_FromAsset(jsii.String("lambda/secrets/function.zip"), nil),
+		Handler:      jsii.String("main"),
 	})
+	marioSecret.GrantRead(testLambda, nil)
 	testLambda.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
-	testAPI := awsapigatewayv2.NewHttpApi(stack, jsii.String("LoginAPI"), &awsapigatewayv2.HttpApiProps{
-		ApiName: jsii.String("LambdaLoginAPI"),
+
+	testAPI := awsapigatewayv2.NewHttpApi(stack, jsii.String("TestAPI"), &awsapigatewayv2.HttpApiProps{
+		ApiName: jsii.String("TestAPI"),
 		CorsPreflight: &awsapigatewayv2.CorsPreflightOptions{
 			AllowHeaders: jsii.Strings("Authorization"),
 			AllowMethods: &[]awsapigatewayv2.CorsHttpMethod{
@@ -47,8 +56,9 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		// DefaultAuthorizer:          marioAuth,
 		// DefaultAuthorizationScopes: jsii.Strings("openid", "email"),
 	})
+	testAPI.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
 	testIntegration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
-		jsii.String("LoginIntegration"),
+		jsii.String("TestIntegration"),
 		testLambda,
 		&awsapigatewayv2integrations.HttpLambdaIntegrationProps{},
 	)
@@ -57,16 +67,9 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		Methods:     &[]awsapigatewayv2.HttpMethod{awsapigatewayv2.HttpMethod_GET},
 		Integration: testIntegration,
 	})
-	testAPI.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
-
-	marioSecret := awssecretsmanager.Secret_FromSecretCompleteArn(
-		stack,
-		jsii.String("MarioSecret"),
-		jsii.String("arn:aws:secretsmanager:ap-south-1:566275025856:secret:mario/defaultSecret-NI1lQX"),
-	)
-	marioSecret.GrantRead(testLambda, jsii.Strings())
 
 	marioAuthLogTable := awsdynamodb.NewTable(stack, jsii.String("MarioAuthLog"), &awsdynamodb.TableProps{
+		TableName: jsii.String("MarioAuthLog"),
 		PartitionKey: &awsdynamodb.Attribute{
 			Name: jsii.String("PK"),
 			Type: awsdynamodb.AttributeType_STRING,
@@ -79,9 +82,10 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 		RemovalPolicy: awscdk.RemovalPolicy_DESTROY,
 	})
 	marioAuthLogTrigger := awslambda.NewFunction(stack, jsii.String("MarioAuthLogTrigger"), &awslambda.FunctionProps{
-		Runtime: awslambda.Runtime_PROVIDED_AL2023(),
-		Code:    awslambda.AssetCode_FromAsset(jsii.String("lambda/users/function.zip"), nil),
-		Handler: jsii.String("main"),
+		FunctionName: jsii.String("MarioAuthLogTrigger"),
+		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
+		Code:         awslambda.AssetCode_FromAsset(jsii.String("lambda/users/function.zip"), nil),
+		Handler:      jsii.String("main"),
 	})
 	marioAuthLogTrigger.ApplyRemovalPolicy(awscdk.RemovalPolicy_DESTROY)
 	marioAuthLogTrigger.AddEnvironment(jsii.String("AUTHLOG_TABLENAME"), marioAuthLogTable.TableName(), nil)
@@ -89,11 +93,10 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 
 	// Create a User Pool and client
 	marioUserPool := awscognito.NewUserPool(stack, jsii.String("MarioUserPool"), &awscognito.UserPoolProps{
+		UserPoolName:    jsii.String("MarioUserPool"),
 		AccountRecovery: awscognito.AccountRecovery_EMAIL_ONLY,
 		LambdaTriggers: &awscognito.UserPoolTriggers{
-			PreSignUp:          marioAuthLogTrigger,
 			PostConfirmation:   marioAuthLogTrigger,
-			PreAuthentication:  marioAuthLogTrigger,
 			PostAuthentication: marioAuthLogTrigger,
 		},
 		SelfSignUpEnabled: jsii.Bool(true),
@@ -117,9 +120,9 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 			Email:    jsii.Bool(true),
 			Username: jsii.Bool(false),
 		},
-		UserPoolName: jsii.String("MarioUserPool"),
 	})
 	marioUserPoolClient := marioUserPool.AddClient(jsii.String("MarioUserPoolClient"), &awscognito.UserPoolClientOptions{
+		UserPoolClientName:    jsii.String("MarioUserPoolClient"),
 		EnableTokenRevocation: jsii.Bool(true),
 		GenerateSecret:        jsii.Bool(true),
 		AuthFlows: &awscognito.AuthFlow{
@@ -157,6 +160,22 @@ func NewMarioCdkStack(scope constructs.Construct, id string, props *MarioCdkStac
 			ManagedLoginVersion: awscognito.ManagedLoginVersion_NEWER_MANAGED_LOGIN,
 		},
 	)
+
+	region := marioUserPool.Stack().Region()
+	poolID := marioUserPool.UserPoolId()
+	issuer := fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/%s", *region, *poolID)
+	clientID := marioUserPoolClient.UserPoolClientId()
+	clientSecret := marioUserPoolClient.UserPoolClientSecret().UnsafeUnwrap()
+
+	awssecretsmanager.NewSecret(stack, jsii.String("MarioUserPoolSecret"), &awssecretsmanager.SecretProps{
+		SecretName: jsii.String("MarioUserPoolSecret"),
+		SecretObjectValue: &map[string]awscdk.SecretValue{
+			"issuerURL":    awscdk.SecretValue_UnsafePlainText(jsii.String(issuer)),
+			"clientID":     awscdk.SecretValue_UnsafePlainText(clientID),
+			"clientSecret": awscdk.SecretValue_UnsafePlainText(clientSecret),
+		},
+	})
+
 	awscdk.NewCfnOutput(stack, jsii.String("Auth Trigger Role"), &awscdk.CfnOutputProps{
 		Value:       marioAuthLogTrigger.Role().RoleName(),
 		Description: jsii.String("Role that runs the auth trigger"),
@@ -182,7 +201,8 @@ func main() {
 
 	NewMarioCdkStack(app, "MarioCdkStack", &MarioCdkStackProps{
 		awscdk.StackProps{
-			Env: env(),
+			Env:       env(),
+			StackName: jsii.String("MarioCdkStack"),
 		},
 	})
 
